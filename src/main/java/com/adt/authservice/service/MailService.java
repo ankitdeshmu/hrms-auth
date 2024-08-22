@@ -143,5 +143,24 @@ public class MailService {
     	LOGGER.error("send mail error" +e.getMessage());
     	}
     }
+    
+    
+	public void sendMail(String email, String otp) {
+		Mail mail = new Mail();
+		mail.setSubject("Verifcation Code");
+		mail.setTo(email);
+		mail.setFrom(mailFrom);
+		mail.getModel().put("userName", email);
+		mail.getModel().put("OTP", otp);
+		try {
+			templateConfiguration.setClassForTemplateLoading(getClass(), basePackagePath);
+			Template template = templateConfiguration.getTemplate("otp.ftl");
+			String mailContent = FreeMarkerTemplateUtils.processTemplateIntoString(template, mail.getModel());
+			mail.setContent(mailContent);
+			send(mail);
+		} catch (Exception e) {
 
+		}
+
+	}
 }

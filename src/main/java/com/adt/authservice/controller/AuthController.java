@@ -65,6 +65,7 @@ import com.adt.authservice.model.payload.ApiResponse;
 import com.adt.authservice.model.payload.JwtAuthenticationResponse;
 import com.adt.authservice.model.payload.LoginRequest;
 import com.adt.authservice.model.payload.LoginResponse;
+import com.adt.authservice.model.payload.OtpRequest;
 import com.adt.authservice.model.payload.PasswordResetLinkRequest;
 import com.adt.authservice.model.payload.PasswordResetRequest;
 import com.adt.authservice.model.payload.RegistrationRequest;
@@ -75,6 +76,7 @@ import com.adt.authservice.security.JwtTokenProvider;
 import com.adt.authservice.security.JwtTokenValidator;
 import com.adt.authservice.service.ApiDetailsService;
 import com.adt.authservice.service.AuthService;
+import com.adt.authservice.service.OtpService;
 import com.adt.authservice.service.RoleService;
 
 @RestController
@@ -95,6 +97,10 @@ public class AuthController {
 
 	@Autowired
 	ApiDetailsService apiDetailsService;
+	
+	@Autowired
+	private OtpService otpService;
+
 
 	@Value("${-Dmy.port}")
 	private Integer serverPort;
@@ -158,7 +164,7 @@ public class AuthController {
 		CustomUserDetails customUserDetails = (CustomUserDetails) authentication.getPrincipal();
 		LOGGER.info("Logged in User returned [API]: " + customUserDetails.getUsername());
 		SecurityContextHolder.getContext().setAuthentication(authentication);
-
+		 String otp = otpService.generateOtp(customUserDetails.getUsername());
 		return authService.createAndPersistRefreshTokenForDevice(authentication, loginRequest)
 				.map(RefreshToken::getToken).map(refreshToken -> {
 					String jwtToken = authService.generateToken(customUserDetails);
@@ -174,6 +180,18 @@ public class AuthController {
 				})
 				.orElseThrow(() -> new UserLoginException("Couldn't create refresh token for: [" + loginRequest + "]"));
 	}
+	
+	    @PostMapping("/verifyOtp")
+	    public ResponseEntity<?> verifyOtp(@RequestBody OtpRequest otpRequest) {
+	        // 3. Verify the OTP
+	        boolean isOtpValid = otpService.validateOtp(otpRequest.getUsername(), otpRequest.getOtp());
+
+	        if (isOtpValid) {
+	          return ResponseEntity.status(HttpStatus.OK).body("Valid OTP");
+	        } else {
+	            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid OTP");
+	        }
+	    }
 
 	/**
 	 * Entry point for the user registration process. On successful registration,

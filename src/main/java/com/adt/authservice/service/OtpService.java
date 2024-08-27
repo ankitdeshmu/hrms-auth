@@ -1,25 +1,22 @@
 package com.adt.authservice.service;
 
-import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 
-import javax.mail.MessagingException;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.ui.freemarker.FreeMarkerTemplateUtils;
 
-import com.adt.authservice.model.Mail;
-
-import freemarker.core.ParseException;
-import freemarker.template.Configuration;
-import freemarker.template.MalformedTemplateNameException;
-import freemarker.template.Template;
-import freemarker.template.TemplateException;
-import freemarker.template.TemplateNotFoundException;
+import com.adt.authservice.model.User;
+import com.adt.authservice.repository.UserRepository;
+import com.adt.authservice.util.TableDataExtractor;
 
 @Service
 public class OtpService {
@@ -32,23 +29,88 @@ public class OtpService {
 	@Value("${app.velocity.templates.location}")
 	private String basePackagePath;
 
-	private Configuration templateConfiguration;
+	@Value("${otp.duration.time}")
+	private int otpDurationLimit;
 
-	private final Map<String, String> otpCache = new HashMap<>();
+	@Autowired
+	private TableDataExtractor dataExtractor;
 
-	public String generateOtp(String username) {
-		String otp = String.valueOf(new Random().nextInt(999999));
-		otpCache.put(username, otp);
-		mailService.sendMail(username, otp);
-		return otp;
+	@Autowired
+	private AuthService authService;
+
+	@Autowired
+	UserRepository userRepository;
+
+	private final Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+
+	private final Map<String, Map<String, Long>> otpCache = new HashMap<>();
+
+	public String generatOtp(String username, String password) {
+		try {
+			Optional<User> user = userRepository.findByEmail(username);
+			LOGGER.info("user info:" + user);
+			if (user.isPresent()) {
+				User users = user.get();
+				if (validateUser(users, password)) {
+					Map<String, Long> storeOtp = new HashMap<>();
+					String otp = String.valueOf(new Random().nextInt(999999));
+					otpCache.put(username, storeOtp);
+					mailService.sendMail(username, otp);
+					long currentTime = System.currentTimeMillis();
+					LOGGER.info("OTP time:" + currentTime);
+					storeOtp.put(otp, currentTime);
+					return "OTP successfully generated";
+				}
+				return "Password is Incurrect";
+			}
+			return "User not found";
+		} catch (Exception e) {
+			LOGGER.error(" exception in generatOtp method" + e.getMessage());
+			return e.getMessage();
+		}
 	}
 
-	public boolean validateOtp(String username, String otp) {
-		if (otp.equals(otpCache.get(username))) {
-			otpCache.remove(username);
-			return true;
+	public boolean validateOtp(String userName, String otp) {
+		try {
+			String sql = "SELECT * FROM av_schema.configuration where functionality='email_varification'";
+			LOGGER.info("username" + userName);
+			boolean status = false;
+			List<Map<String, Object>> otpData = dataExtractor.extractDataFromTable(sql);
+			for (Map<String, Object> otpStatus : otpData) {
+				status = Boolean.parseBoolean(String.valueOf(otpStatus.get("status")));
+			}
+			LOGGER.info("status" + status);
+			if (!status) {
+				return true;
+			}
+			Map<String, Long> generatedTime = otpCache.get(userName);
+			if (generatedTime != null) {
+				Set<String> keys = generatedTime.keySet();
+				List<String> keyList = new ArrayList<>(keys);
+				if (otp.equals(keyList.get(0))) {
+					long oldTime = generatedTime.get(otp);
+					long currentTime = System.currentTimeMillis();
+					long duration = currentTime - oldTime;
+					if (duration <= otpDurationLimit) {
+						otpCache.remove(userName);
+						return true;
+					}
+
+					return false;
+				}
+				return false;
+			}
+			return false;
+		} catch (Exception e) {
+			LOGGER.error("exception in validate OTP method " + e.getMessage());
+			return false;
 		}
-		return false;
+
+	}
+
+	public boolean validateUser(User user, String password) {
+		LOGGER.info("validateUser method");
+		return authService.currentPasswordMatches(user, password);
 	}
 
 }

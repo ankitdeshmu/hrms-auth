@@ -14,16 +14,14 @@
 package com.adt.authservice.controller;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import javax.mail.MessagingException;
-import javax.transaction.Transactional;
 import javax.validation.Valid;
 
-import com.adt.authservice.model.User;
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,11 +34,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.ui.freemarker.FreeMarkerTemplateUtils;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -58,14 +53,13 @@ import com.adt.authservice.exception.PasswordResetLinkException;
 import com.adt.authservice.exception.TokenRefreshException;
 import com.adt.authservice.exception.UserLoginException;
 import com.adt.authservice.exception.UserRegistrationException;
-import com.adt.authservice.model.ApiDetails;
 import com.adt.authservice.model.CustomUserDetails;
 import com.adt.authservice.model.Role;
+import com.adt.authservice.model.User;
 import com.adt.authservice.model.payload.ApiResponse;
 import com.adt.authservice.model.payload.JwtAuthenticationResponse;
 import com.adt.authservice.model.payload.LoginRequest;
 import com.adt.authservice.model.payload.LoginResponse;
-import com.adt.authservice.model.payload.OtpRequest;
 import com.adt.authservice.model.payload.PasswordResetLinkRequest;
 import com.adt.authservice.model.payload.PasswordResetRequest;
 import com.adt.authservice.model.payload.RegistrationRequest;
@@ -77,7 +71,10 @@ import com.adt.authservice.security.JwtTokenValidator;
 import com.adt.authservice.service.ApiDetailsService;
 import com.adt.authservice.service.AuthService;
 import com.adt.authservice.service.OtpService;
-import com.adt.authservice.service.RoleService;
+
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -160,11 +157,11 @@ public class AuthController {
 	public ResponseEntity authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
 		Authentication authentication = authService.authenticateUser(loginRequest)
 				.orElseThrow(() -> new UserLoginException("Couldn't login user [" + loginRequest + "]"));
-		
+
 		CustomUserDetails customUserDetails = (CustomUserDetails) authentication.getPrincipal();
 		LOGGER.info("Logged in User returned [API]: " + customUserDetails.getUsername());
 		SecurityContextHolder.getContext().setAuthentication(authentication);
-		 String otp = otpService.generateOtp(customUserDetails.getUsername());
+		 if(otpService.validateOtp(customUserDetails.getUsername(),loginRequest.getOtp())) {
 		return authService.createAndPersistRefreshTokenForDevice(authentication, loginRequest)
 				.map(RefreshToken::getToken).map(refreshToken -> {
 					String jwtToken = authService.generateToken(customUserDetails);
@@ -179,19 +176,15 @@ public class AuthController {
 					return ResponseEntity.ok(loginResponse);
 				})
 				.orElseThrow(() -> new UserLoginException("Couldn't create refresh token for: [" + loginRequest + "]"));
+		 }
+		 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("increct OTP");
 	}
 	
-	    @PostMapping("/verifyOtp")
-	    public ResponseEntity<?> verifyOtp(@RequestBody OtpRequest otpRequest) {
-	        // 3. Verify the OTP
-	        boolean isOtpValid = otpService.validateOtp(otpRequest.getUsername(), otpRequest.getOtp());
-
-	        if (isOtpValid) {
-	          return ResponseEntity.status(HttpStatus.OK).body("Valid OTP");
-	        } else {
-	            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid OTP");
-	        }
-	    }
+	@PostMapping("/generatOtp")
+	public ResponseEntity<?> generatOtp(@Param(value = "userName") String userName, @Param(value = "password") String password) {
+		LOGGER.info("OTP generation method");
+		return ResponseEntity.status(HttpStatus.OK).body(otpService.generatOtp(userName, password));
+	}
 
 	/**
 	 * Entry point for the user registration process. On successful registration,

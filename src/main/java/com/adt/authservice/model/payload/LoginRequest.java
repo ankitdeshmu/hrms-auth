@@ -28,15 +28,19 @@ public class LoginRequest {
 
     @NotNull(message = "Login password cannot be blank")
     private String password;
+    
+   
+    private String otp;
 
     @Valid
     @NotNull(message = "Device info cannot be null")
     private DeviceInfo deviceInfo;
 
-    public LoginRequest(String username, String email, String password, DeviceInfo deviceInfo) {
+    public LoginRequest(String username, String email, String password,String otp, DeviceInfo deviceInfo) {
         this.username = username;
         this.email = email;
         this.password = password;
+        this.otp = otp;
         this.deviceInfo = deviceInfo;
     }
 
@@ -67,7 +71,15 @@ public class LoginRequest {
         this.password = password;
     }
 
-    public DeviceInfo getDeviceInfo() {
+    public String getOtp() {
+		return otp;
+	}
+
+	public void setOtp(String otp) {
+		this.otp = otp;
+	}
+
+	public DeviceInfo getDeviceInfo() {
         return deviceInfo;
     }
 

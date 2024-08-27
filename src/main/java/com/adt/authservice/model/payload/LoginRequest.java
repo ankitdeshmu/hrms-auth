@@ -29,7 +29,6 @@ public class LoginRequest {
     @NotNull(message = "Login password cannot be blank")
     private String password;
     
-   
     private String otp;
 
     @Valid
